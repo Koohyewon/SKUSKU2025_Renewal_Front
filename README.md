@@ -12,7 +12,6 @@
 | 목적 | 동아리 활동(프로젝트 소개, 기수 팀 소개, 사이버캠퍼스 자료실·과제)을 단일 웹 서비스에서 통합 관리 |
 | 주요 사용자 | 동아리 운영진(어드민), 재학 중인 동아리 부원(라이온) |
 | 배포·운영 현황 | 현재 실서비스로 배포되어 동아리 구성원이 상시 이용 중 |
-| 저장소 | [github.com/Koohyewon/SKUSKU2025_Renewal_Front](https://github.com/Koohyewon/SKUSKU2025_Renewal_Front) |
 
 ---
 
