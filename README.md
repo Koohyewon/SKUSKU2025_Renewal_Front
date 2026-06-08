@@ -1,12 +1,171 @@
-# React + Vite
+# SKU-SKU 2025 리뉴얼 — 프로젝트 포트폴리오
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+> 성결대 멋쟁이사자처럼(LikeLion) 동아리의 공식 운영 플랫폼. 실제 배포·운영 중인 서비스에 프론트엔드 개발자로 참여하여, 사용자 페이지 3종과 어드민 페이지 4종을 설계부터 구현까지 단독 담당.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## 1. 프로젝트 개요
 
-## Expanding the ESLint configuration
+| 항목 | 내용 |
+|------|------|
+| 서비스명 | SKU-SKU (성결대 멋쟁이사자처럼 플랫폼) |
+| 목적 | 동아리 활동(프로젝트 소개, 기수 팀 소개, 사이버캠퍼스 자료실·과제)을 단일 웹 서비스에서 통합 관리 |
+| 주요 사용자 | 동아리 운영진(어드민), 재학 중인 동아리 부원(라이온) |
+| 배포·운영 현황 | 현재 실서비스로 배포되어 동아리 구성원이 상시 이용 중 |
+| 저장소 | [github.com/Koohyewon/SKUSKU2025_Renewal_Front](https://github.com/Koohyewon/SKUSKU2025_Renewal_Front) |
 
-If you are developing a production application, we recommend using TypeScript and enable type-aware lint rules. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+---
+
+## 2. 기술 스택
+
+| 분류 | 기술 |
+|------|------|
+| 프레임워크 | React 19, Vite 6 |
+| 라우팅 | React Router DOM v7 |
+| 스타일링 | Tailwind CSS v4 |
+| HTTP 통신 | Axios (쿠키 기반 세션 인증, `withCredentials: true`) |
+| 파일 업로드 | AWS S3 Presigned URL + `react-dropzone` |
+| 인증 | Google OAuth2 (`@react-oauth/google`), 서버 세션 쿠키 |
+| UI 보조 | MUI Joy, lucide-react, framer-motion, GSAP, Swiper, lottie-react |
+| 빌드·배포 | Vite build → 정적 파일 배포 |
+
+---
+
+## 3. 아키텍처 및 전체 기능 요약
+
+애플리케이션은 URL 접두사에 따라 **세 개의 독립 라우트 레이아웃**으로 분기된다.
+
+- `/` — 일반 사용자 영역 (메인, 프로젝트, 팀 소개)
+- `/CyberCampus/*` — 로그인 필수 사이버캠퍼스 영역 (자료실, 과제, 복습 퀴즈)
+- `/Admin/*` — `ADMIN_LION` 권한 확인 후 진입하는 운영자 전용 영역
+
+인증은 Google OAuth2 로그인 후 발급된 **HttpOnly 쿠키 세션**을 서버가 관리하며, 클라이언트는 `/log/status` 엔드포인트로 현재 사용자 정보를 확인한다. 어드민 전용 페이지는 `AdminRouteGuard` 컴포넌트가 마운트 시점에 역할을 검증하여, `ADMIN_LION`이 아닌 경우 즉시 루트로 리다이렉트한다.
+
+파일 첨부가 필요한 모든 업로드 흐름은 **Presigned URL 방식**을 채택했다. 백엔드에서 S3 서명 URL을 발급받은 뒤, 클라이언트가 해당 URL로 직접 PUT 요청을 보내는 구조여서 파일이 서버를 거치지 않는다.
+
+---
+
+## 4. 담당 구현 상세
+
+### 4-1. Likelion 프로젝트 소개 페이지 (`/project`)
+
+API에서 받아온 프로젝트 목록을 기수별 탭으로 필터링하여 그리드 형태로 표시하는 페이지다. 기수 탭 목록은 하드코딩하지 않고 API 응답의 `classTh` 필드를 `Set`으로 중복 제거한 뒤 내림차순 정렬하여 동적으로 구성했다. 덕분에 새 기수가 등록되면 별도 코드 수정 없이 탭이 자동으로 추가된다.
+
+URL 쿼리 파라미터(`?tab=13`)를 통해 외부에서 특정 기수로 직접 접근하거나 공유할 수 있다. `useSearchParams`로 초기값을 읽어 탭 상태를 초기화하고, 탭 전환 시 필터링된 프로젝트 수를 헤더에 실시간으로 반영한다. 카드에 hover하면 썸네일이 반투명해지며 "사이트 보러가기" 버튼이 나타나고, 클릭 시 프로젝트 URL을 새 탭에서 여는 UX를 구현했다.
+
+---
+
+### 4-2. 기수 소개 팀 페이지 (`/team`)
+
+11기·12기·13기 각 기수의 팀원 정보를 기수별 컴포넌트(`Team11`, `Team12`, `Team13`)로 분리하여 관리한다. `TeamPage`는 탭 상태만 관리하고 실제 렌더링은 각 기수 컴포넌트에 위임하는 구조다. 프로젝트 소개 페이지와 동일하게 URL 쿼리 파라미터(`?tab=13`)로 기수를 지정할 수 있어 헤더 네비게이션에서 특정 기수 페이지로 직접 링크할 수 있다.
+
+각 팀원 카드는 역할(대표/부대표/파트장/운영진), 이름, 학과를 표시하며, `TeamSection` 컴포넌트를 재사용해 팀 구분별 레이아웃을 일관되게 유지했다. Tailwind의 반응형 유틸리티를 활용하여 모바일에서는 중앙 정렬, 데스크탑에서는 좌측 정렬로 레이아웃이 전환된다.
+
+---
+
+### 4-3. 사이버캠퍼스 자료실 페이지 (`/CyberCampus/lecture/:track`)
+
+트랙(FRONTEND / BACKEND / DESIGN)별로 강의 자료 목록을 표시하는 페이지다. URL의 `:track` 파라미터를 변환하여(`front-end` → `FRONTEND`) API 요청 파라미터로 사용한다.
+
+목록은 한 페이지당 10건으로 클라이언트 사이드 페이지네이션을 구현했으며, 전체 데이터를 `allData`에 별도로 보관하여 제목 검색 시 원본 데이터 손실 없이 필터링 결과를 반영한 뒤 페이지를 1로 초기화한다. 빈 행 패딩(`Array(Math.max(15 - data.length, 0)).fill(null)`) 처리로 데이터가 적어도 테이블 높이가 일정하게 유지된다.
+
+---
+
+### 4-4. 사이버캠퍼스 과제 제출 페이지 (`/CyberCampus/assignment/:track/submit/:assignmentId`)
+
+부원이 과제를 조회하고 답안(주관식 텍스트 + 파일)을 제출하거나 수정하는 페이지다. 페이지 진입 방식에 따른 데이터 로딩 전략을 단계적으로 구성했다. 이전 화면에서 `location.state`로 전달된 과제 기본 정보가 있으면 이를 우선 사용하고, 이미 제출한 이력이 있는 경우(`isSubmit === "True"`)에만 제출 내용(`/assignment/submit/:id`)을 추가로 요청한다. 두 경우가 모두 실패한 경우의 폴백으로 트랙 전체 목록에서 해당 과제를 탐색하는 3단계 로딩 전략을 적용하여 사용자가 어떤 경로로 접근해도 정상적으로 데이터를 볼 수 있게 했다.
+
+제출 이후에는 읽기 모드로 전환되어 제출된 내용과 파일 목록이 표시되고, "수정하기" 버튼으로 수정 모드를 진입할 수 있다. 수정 시에는 변경 사항만 서버에 전달하는 방식으로 구현했다. 새로 추가한 파일은 S3에 업로드 후 `status: "NEW"`로 표기하고, 기존 파일 중 삭제한 것은 `deletedFiles` 배열에 `status: "DELETE"`로 쌓아두었다가 저장 시점에 한꺼번에 페이로드에 담아 전송한다. 이를 통해 파일 변경이 없는 경우에는 불필요한 업로드 요청이 발생하지 않는다.
+
+드래그 앤 드롭 파일 첨부도 지원한다. `dragLeave` 이벤트가 자식 요소 이동 시에도 발생하는 브라우저 특성으로 인해 drop zone 활성 상태가 깜박이는 문제가 있었다. `getBoundingClientRect()`로 마우스 좌표가 드롭 존 영역 밖으로 실제로 벗어났을 때만 비활성화되도록 처리하여 UX를 안정화했다.
+
+---
+
+### 4-5. 운영자 전용 과제 등록·수정 페이지 (`/Admin/assignment/:track/add`)
+
+등록과 수정을 하나의 컴포넌트(`AddAssignment`)에서 처리한다. `location.state.isEdit` 값으로 모드를 구분하며, 수정 모드 진입 시 이전 화면에서 넘겨받은 과제 상세 데이터로 폼을 초기화한다.
+
+파일 첨부 방식(주관식 / 파일첨부)은 라디오 버튼으로 전환하며, 파일 첨부 선택 시 드래그 앤 드롭 업로더가 노출된다. 수정 모드에서는 기존 파일과 새 파일을 구분하여 처리한다. 기존에 업로드된 파일은 `File` 객체가 아닌 서버 응답 객체로 구별하며, 사용자가 삭제한 기존 파일은 `deletedFiles` 배열에 `status: "DELETE"`로 추적한다. 저장 시점에 새로 추가된 파일만 S3에 업로드하고, 삭제 목록과 신규 파일 목록을 합산하여 PUT API에 전달하는 방식으로 불필요한 재업로드를 방지했다.
+
+---
+
+### 4-6. 운영자 전용 과제 채점 페이지 (`/Admin/assignmentCheck/:track/babylions/:id/:submitId`)
+
+`AssignmentCheck`(과제 목록)에서 특정 과제를 선택하면 제출한 부원 목록(`CheckLions`)으로, 다시 특정 부원의 제출물을 선택하면 채점 상세(`CheckDetails`)로 이어지는 3단계 드릴다운 구조다.
+
+채점 상세 화면에서는 제출된 텍스트와 파일을 확인하고, 피드백 텍스트 작성 후 "통과(PASS)" 또는 "보류(NONE_PASS)"를 선택해 결과를 저장한다. 파일 다운로드는 Fetch API로 Blob을 가져와 가상 `<a>` 태그로 처리하는 방식으로, CORS 제약이 있는 CDN URL에서도 파일 이름을 유지한 채 다운로드되도록 구현했다. 채점 버튼은 `isSubmitting` 상태로 중복 클릭을 방지하고 처리 중임을 시각적으로 표시한다.
+
+---
+
+### 4-7. 운영자 전용 자료실 관리 페이지 (`/Admin/LectureManagement/:track`)
+
+자료 등록(`AdminCCLectureUpload`)과 수정(`AdminCCLectureEdit`) 두 페이지로 구성된다.
+
+**등록 페이지**는 제목, 본문, 파일을 입력하면 Presigned URL 방식으로 S3에 파일을 업로드한 뒤 CDN URL과 파일 메타데이터를 백엔드 등록 API에 전달하는 흐름이다. `textarea`의 높이가 입력 내용에 따라 자동으로 늘어나도록 `scrollHeight` 기반으로 동적 조절을 구현했다.
+
+**수정 페이지**는 기존 데이터를 불러와 수정하는 기능을 담당하며, 이 과정에서 실서비스 배포 후 발견된 핵심 버그를 분석하고 해결했다. 관련 내용은 아래 섹션에서 별도로 다룬다.
+
+---
+
+## 5. 문제 해결 경험 — 자료실 수정 기능의 신규 레코드 생성 버그
+
+### 문제 발견
+
+서비스가 배포된 이후 동아리 구성원이 자료실 게시물을 수정했을 때, 화면에 아무것도 표시되지 않는 상황이 보고되었다. 확인해 보니 수정 요청이 기존 DB 레코드를 업데이트하지 않고 새 레코드를 생성하고 있었다. 그 결과 동일한 게시물 ID에 대해 중복·불일치 데이터가 생겨났고, 목록 조회 API가 이를 처리하지 못해 화면이 빈 상태가 되었다.
+
+특이한 점은 **텍스트(제목·본문)만 수정할 때는 정상 동작하고, 파일을 변경(추가·삭제)하는 경우에만 문제가 발생한다**는 것이었다. 이 때문에 개발 단계 테스트에서는 발견되지 않았고 실사용 중에야 드러났다.
+
+### 원인 분석
+
+수정 페이지(`AdminCCLectureEdit`)의 파일 처리 로직을 분석했다. 기존 구현에서는 게시물을 불러올 때 파일 목록에 `status: "KEEP"`을 부여했다. 그러나 드롭존에서 새 파일이 추가될 때 Presigned URL 발급부터 S3 PUT까지 즉시 처리한 뒤, 결과를 `status: "NEW"`로 상태 배열에 병합하는 방식이었다.
+
+문제는 **수정 API 페이로드를 구성할 때** 있었다. `handleUpdate` 함수는 `files` 배열의 모든 항목을 그대로 직렬화하여 서버에 전송한다. `status: "KEEP"` 항목이 포함되면 서버는 이를 "기존 파일을 유지하면서 업데이트"로 해석해야 하는데, 파일 변경이 있는 경우 서버의 UPDATE 분기가 아닌 INSERT 분기가 실행되어 새 레코드가 만들어지고 있었다.
+
+즉, 텍스트 수정만 할 때는 파일 배열의 status 값이 서버 처리 경로에 영향을 주지 않았으나, **파일 변경이 포함된 경우 status 값에 따른 서버 분기 처리가 제대로 이루어지지 않았던 것**이다.
+
+### 해결 과정
+
+프론트엔드에서 파일 상태 전환 로직을 명확히 정의하는 방향으로 수정했다.
+
+```js
+// 기존: 기존 파일을 불러올 때 status: "KEEP" 부여
+setFiles(
+  lecture.joinLectureFiles.map((file) => ({
+    ...file,
+    status: "KEEP",
+  }))
+);
+
+// 수정 후: 파일 삭제 시 splice가 아니라 status: "DELETE"로 전환
+const handleFileDelete = (index) => {
+  setFiles((prevFiles) => {
+    const updated = [...prevFiles];
+    if (updated[index].status === "NEW") {
+      updated.splice(index, 1);          // 새 파일은 목록에서 제거
+    } else {
+      updated[index].status = "DELETE";  // 기존 파일은 상태만 변경
+    }
+    return [...updated];
+  });
+};
+```
+
+그리고 `handleUpdate`에서 페이로드를 구성할 때 `status: "DELETE"` 파일을 화면에서는 "[삭제됨]" 표시로 보여주되 API에 포함시켜 서버가 삭제 처리하도록 했다. 신규 파일은 드롭존에 파일이 투입될 때 즉시 Presigned URL을 발급받아 S3에 업로드한 뒤 `status: "NEW"`로 상태에 추가하는 흐름을 유지했다.
+
+이 수정을 통해 서버가 `KEEP`, `NEW`, `DELETE` 세 가지 상태를 기반으로 각 파일의 처리 경로를 올바르게 분기할 수 있게 되었고, 수정 요청이 항상 기존 레코드를 갱신하는 방향으로 동작함을 확인했다.
+
+### 배운 점
+
+텍스트 전용 케이스와 파일 포함 케이스를 분리하여 테스트해야 한다는 교훈을 얻었다. 파일 업로드처럼 외부 상태(S3)와 내부 상태(DB 레코드)가 분리된 흐름에서는, 상태 전이 경로 전체를 명시적으로 정의해야 서버 측 처리 로직과 불일치가 생기지 않는다.
+
+---
+
+## 6. 배운 점 / 성과
+
+**복잡한 파일 상태 관리 설계.** 자료실 수정, 과제 수정, 과제 등록 등 파일을 다루는 여러 화면에서 "기존 파일 유지 / 신규 추가 / 삭제"를 상태로 표현하고 API 페이로드로 변환하는 패턴을 반복 적용하며, 파일 상태 기계를 명시적으로 설계하는 습관을 쌓았다.
+
+**운영 환경에서만 드러나는 버그 대응 경험.** 로컬·개발 테스트를 통과한 기능이 실서비스에서 특정 경로에서만 실패하는 상황을 경험했다. 재현 조건을 좁혀 원인을 분리하고 수정하는 과정을 통해 단순 기능 구현을 넘어 서비스 안정성에 대해 생각하게 되었다.
+
+**역할 기반 라우팅 설계.** `AdminRouteGuard`와 `LoginRouteGuard`를 통해 권한별 접근 제어를 라우트 레벨에서 구현했다. 인증·인가 로직을 페이지 컴포넌트가 아닌 가드 컴포넌트로 분리함으로써 각 페이지는 실제 기능에만 집중할 수 있는 구조를 만들었다.
+
+**실사용 서비스 개발 경험.** 단순 클론이나 토이 프로젝트가 아닌, 실제 사용자가 있는 서비스를 팀으로 개발하고 배포까지 경험했다. 기능을 구현하는 것뿐 아니라 서비스가 안정적으로 동작하는 것까지 책임져야 한다는 현실적인 감각을 익혔다.
